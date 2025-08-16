@@ -2,14 +2,18 @@ variable "vpc_id" {}
 variable "public_subnet_ids" {}
 variable "app_subnet_ids" {}
 variable "environment" {}
+variable "app_name" {}
 variable "web_instance_type" {}
 variable "app_instance_type" {}
 
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
 // IAM role for the application tier EC2 instances
 resource "aws_iam_role" "app_role" {
-    name = "${var.environment}-app-ec2-role"
+    name = "${var.environment}-${var.app_name}--ec2-role"
 
-    assume_role_policy = jsondecode(
+    assume_role_policy = jsonencode(
         {
             Version = "2012-10-17",
             Statement = [
@@ -24,15 +28,26 @@ resource "aws_iam_role" "app_role" {
         })
 
     tags = {
-        Name        = "${var.environment}-app-ec2-role"
+        Name        = "${var.environment}-${var.app_name}-ec2-role"
         Environment = var.environment
+        Application = var.app_name
     }
+}
+
+resource "aws_cloudwatch_log_group" "app_log_group" {
+  name              = "/aws/ec2/${var.environment}-${var.app_name}-log-group"
+  retention_in_days = 30
+
+  tags = {
+    Name        = "${var.environment}-${var.app_name}-log-group"
+    Environment = var.environment
+    Application = var.app_name
+  }
 }
 
 // IAM policy to allow writing to CloudWatch Logs
 resource "aws_iam_policy" "app_logging_policy" {
-    name = "${var.environment}-app-logging-policy"
-    role = aws_iam_role.app_role.id
+    name = "${var.environment}-${var.app_name}-logging-policy"
 
     policy = jsonencode({
         Version = "2012-10-17",
@@ -45,20 +60,31 @@ resource "aws_iam_policy" "app_logging_policy" {
                     "logs:PutLogEvents",
                     "logs:DescribeLogStreams",
                 ],
-                Resource = "arn:aws:logs:*:*:*"
+                Resource = [
+                  # Permission to create the specific log group
+                  "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/ec2/${var.environment}-${var.app_name}-log-group",
+                  # Permission for any log stream within that specific log group
+                  "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/ec2/${var.environment}-${var.app_name}-log-group:*",
+                ]
             }
         ]
     })
 }
 
+resource "aws_iam_role_policy_attachment" "app_logging_attachment" {
+  role       = aws_iam_role.app_role.name
+  policy_arn = aws_iam_policy.app_logging_policy.arn
+}
+
 // IAM instance profile for the application tier
 resource "aws_iam_instance_profile" "app_instance_profile" {
-    name = "${var.environment}-app-instance-profile"
+    name = "${var.environment}-${var.app_name}-instance-profile"
     role = aws_iam_role.app_role.name
 
     tags = {
-        Name        = "${var.environment}-app-instance-profile"
+        Name        = "${var.environment}-${var.app_name}-instance-profile"
         Environment = var.environment
+        Application = var.app_name
     }
 }
 
@@ -93,12 +119,13 @@ resource "aws_security_group" "web_sg" {
   tags = {
     Name        = "${var.environment}-web-sg"
     Environment = var.environment
+    Application = var.app_name
   }
 }
 
 // Placeholder for App Tier Security Group
 resource "aws_security_group" "app_sg" {
-  name        = "${var.environment}-app-sg"
+  name        = "${var.environment}-${var.app_name}-sg"
   description = "App Tier Security Group, allowing traffic from Web Tier"
   vpc_id      = var.vpc_id
 
@@ -117,8 +144,9 @@ resource "aws_security_group" "app_sg" {
   }
 
   tags = {
-    Name        = "${var.environment}-app-sg"
+    Name        = "${var.environment}-${var.app_name}-sg"
     Environment = var.environment
+    Application = var.app_name
   }
 }
 
@@ -147,7 +175,7 @@ data "aws_ami" "amazon_liunx_2" {
 
 // Placeholder for App Tier Launch Template
 resource "aws_launch_template" "app_tier" {
-    name_prefix = "${var.environment}-app-"
+    name_prefix = "${var.environment}-${var.app_name}-"
     image_id = data.aws_ami.amazon_liunx_2.id
     instance_type = var.app_instance_type
 

@@ -4,6 +4,7 @@ include "root" {
 
 locals {
   env_vars = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+  app_name = "app"
 }
 
 dependency "vpc" {
@@ -24,6 +25,7 @@ inputs = {
   vpc_id            = dependency.vpc.outputs.vpc_id
   public_subnet_ids = dependency.vpc.outputs.public_subnet_ids
   app_subnet_ids    = dependency.vpc.outputs.app_subnet_ids
+  app_name          = local.app_name
   web_instance_type = local.env_vars.locals.web_instance_type
   app_instance_type = local.env_vars.locals.app_instance_type
 }
