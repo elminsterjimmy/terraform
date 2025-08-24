@@ -1,0 +1,7 @@
+controller:
+  service:
+    enabled: true
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "alb"
+      service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
